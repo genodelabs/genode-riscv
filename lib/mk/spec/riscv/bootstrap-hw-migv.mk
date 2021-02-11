@@ -1,4 +1,4 @@
-INC_DIR += $(REP_DIR)/src/bootstrap/spec/riscv_migv
+INC_DIR += $(REP_DIR)/src/bootstrap/board/migv
 
 SRC_S   += bootstrap/spec/riscv/crt0.s
 SRC_CC  += bootstrap/spec/riscv/platform.cc
