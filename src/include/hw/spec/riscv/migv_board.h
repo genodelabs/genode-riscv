@@ -25,6 +25,9 @@ namespace Hw::Riscv_board {
 		RAM_SIZE  = 0x4000000,
 
 		TIMER_HZ  = 32768000, /* 32 MHz */
+
+		PLIC_BASE = 0x200000,
+		PLIC_SIZE = 0x1000,
 	};
 
 	enum { UART_BASE, UART_CLOCK };

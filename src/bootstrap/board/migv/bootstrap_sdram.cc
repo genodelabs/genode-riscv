@@ -91,7 +91,8 @@ struct Medeleg : Genode::Register<64>
 
 struct Mideleg : Genode::Register<64>
 {
-	struct Sti : Bitfield<5, 1> { }; /* supervisor timer interrupt */
+	struct Sti  : Bitfield<5, 1> { }; /* supervisor timer interrupt */
+	struct Seip : Bitfield<9, 1> { }; /* supervisor external interrupt */
 };
 
 
@@ -114,6 +115,7 @@ extern "C" void init()
 
 	Mideleg::access_t mideleg = 0;
 	Mideleg::Sti::set(mideleg, 1);
+	Mideleg::Seip::set(mideleg, 1);
 
 	/* set ROM bootloader stack pointer (taken from MIG-V rom code) */
 	constexpr Genode::addr_t rom_sp = 0x1001000ul;
