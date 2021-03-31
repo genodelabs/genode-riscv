@@ -23,6 +23,11 @@ struct Soc_configuration : Genode::Mmio
 	Soc_configuration(Genode::addr_t const mmio_base)
 		: Genode::Mmio(mmio_base) { }
 
+	struct Rst : Register<0x4, 32>
+	{
+		struct Eth0 : Bitfield<2, 1> { };
+	};
+
 	struct Pll_sdr : Register<0x68, 32>
 	{
 		struct En  : Bitfield<0, 1> { };
@@ -31,6 +36,20 @@ struct Soc_configuration : Genode::Mmio
 		struct Dp  : Bitfield<14, 4> { };
 		struct Hdu : Bitfield<18, 1> { };
 
+	};
+
+	struct Eth : Register<0x10, 32>
+	{
+		struct Tx_e : Bitfield<2, 2> { };
+		struct Tx_sr : Bitfield<4, 1> { };
+		struct Txen_e : Bitfield<10, 2> { };
+		struct Txen_sr : Bitfield<12, 1> { };
+		struct Mdc_e : Bitfield<18, 2> { };
+		struct Mdc_sr : Bitfield<20, 1> { };
+		struct Mdio_p : Bitfield<24, 2> { };
+		struct Mdio_e : Bitfield<26, 2> { };
+		struct Mdio_sr : Bitfield<28, 1> { };
+		struct Mdio_smt : Bitfield<29, 1> { };
 	};
 
 	bool check_values(Pll_sdr::access_t const value) const
@@ -57,8 +76,32 @@ struct Soc_configuration : Genode::Mmio
 		write<Pll_sdr>(value);
 		write<Pll_sdr::En>(1);
 	}
+
+	void reset_mac_0()
+	{
+		write<Rst::Eth0>(1);
+
+		/* set MDIO pull-up resistor to "pull-up" */
+		write<Eth::Mdio_p>(1);
+		Genode::log("configured pin control Eth0: ", Genode::Hex(read<Eth>()));
+	}
+
 };
 
+struct Gpio : Genode::Mmio
+{
+	Gpio(Genode::addr_t const mmio_base)
+	: Genode::Mmio(mmio_base)  { }
+
+	struct Padout : Register<0x8, 32> { };
+
+	/* get PHY out of reset */
+	void init_phy()
+	{
+		/* de-assert Eth PHY reset */
+		write<Padout>(0x4);
+	}
+};
 
 struct Mstatus : Genode::Register<64>
 {
@@ -135,7 +178,13 @@ extern "C" void init()
 	Genode::log("\n\nswitched to supervisor mode");
 	Genode::log("initializing SDRAM ...");
 
-	Soc_configuration(0x40e000).configure_pll();
+	Soc_configuration config(0x40e000);
+	config.configure_pll();
+
+	Genode::log("init Ethernet 0 ...");
+	Gpio gpio(0x408000);
+	gpio.init_phy();
+	config.reset_mac_0();
 
 	Genode::log("initialization complete");
 	Genode::log("\nbinaries can be loaded into SDRAM");
