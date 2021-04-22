@@ -11,6 +11,7 @@
  * under the terms of the GNU Affero General Public License version 3.
  */
 
+#include <base/attached_rom_dataspace.h>
 #include <base/attached_ram_dataspace.h>
 #include <base/component.h>
 #include <base/heap.h>
@@ -19,6 +20,7 @@
 #include <net/mac_address.h>
 #include <os/attached_mmio.h>
 #include <timer_session/connection.h>
+#include <util/reconstructible.h>
 
 #include <drivers/nic/uplink_client_base.h>
 
@@ -29,6 +31,7 @@ namespace Genode {
 	template<typename T> class Uplink_client;
 }
 
+
 class Genode::Opencores : Attached_mmio
 {
 	private:
@@ -36,30 +39,72 @@ class Genode::Opencores : Attached_mmio
 		/* number of descriptors */
 		enum { RX = 64, TX = 64 };
 
-		Env           &_env;
-		Mmio::Delayer &_delayer;
+		Env           &  _env;
+		Mmio::Delayer &  _delayer;
+		Net::Mac_address _mac;
 
-		Attached_ram_dataspace _dma_mem {
-			_env.ram(), _env.rm(), (RX + TX) * 0x800, UNCACHED };
+		/*
+		 * PHY=1 for Qemu, PHY=0 for MiG-V Eth0, and PHY=1 for MiG-V Eth1
+		 */
+		const unsigned _phy_port;
 
-		//XXX: make configurable
-		const unsigned phy_port { 0 };
-		uint8_t m[6] { 0x2, 0x0, 0x0, 0x0, 0x0, 0x3 };
-		Net::Mac_address _mac { m };
+		/*
+		 * On MiG-V normal SDRAM allocations lead to packet underruns of TX packets.
+		 * Therefore, we revert to SRAM (not using an Attached_ram_dataspace) which
+		 * can be configured through the 'dma_mem' config node. 256KB of DMA memory
+		 * are required.
+		 */
+		class Dma_mem
+		{
+			private:
+
+				Constructible<Attached_mmio>          _mmio_mem { };
+				Constructible<Attached_ram_dataspace> _ram_mem  { };
+				addr_t                                _mmio_base;
+
+			public:
+
+				Dma_mem(Env &env, addr_t mmio_base, size_t size)
+				:
+				  _mmio_base(mmio_base)
+				{
+					if (mmio_base)
+						_mmio_mem.construct(env, mmio_base, size);
+					else
+						_ram_mem.construct(env. ram(), env.rm(), size, UNCACHED);
+				}
+
+				addr_t local_addr()
+				{
+					return _mmio_base ? (addr_t)_mmio_mem->local_addr<addr_t>()
+					                  : (addr_t)_ram_mem->local_addr<addr_t>();
+				}
+
+				addr_t phys_addr()
+				{
+					if (_mmio_mem.constructed())
+						return _mmio_base;
+
+					return Dataspace_client(_ram_mem->cap()).phys_addr();
+				}
+		};
+
+		Dma_mem _dma_mem;
 
 		unsigned _current_tx { 0 };
 		unsigned _current_rx { 0 };
 
 		struct Moder : Register<0x0, 32>
 		{
-			struct RxEn : Bitfield<0, 1> { }; /* rx enable */
-			struct TxEn : Bitfield<1, 1> { }; /* tx enable */
-			struct NoPre : Bitfield<2, 1> { }; /* no preamble */
-			struct Bro : Bitfield<3, 1> { }; /* receive broadcast */
-			struct Pro : Bitfield<5, 1> { }; /* promiscuous  mode */
-			struct Ifg : Bitfield<6, 1> { }; /* Inter frame gap */
-			struct Exdfren : Bitfield<9, 1> { }; /* Excess defer enabled */
-			struct Fulld : Bitfield<10, 1> { }; /* Full/Half duplex */
+			struct RxEn    : Bitfield<0, 1>  { }; /* rx enable */
+			struct TxEn    : Bitfield<1, 1>  { }; /* tx enable */
+			struct NoPre   : Bitfield<2, 1>  { }; /* no preamble */
+			struct Bro     : Bitfield<3, 1>  { }; /* receive broadcast */
+			struct Pro     : Bitfield<5, 1>  { }; /* promiscuous  mode */
+			struct Ifg     : Bitfield<6, 1>  { }; /* Inter frame gap */
+			struct Exdfren : Bitfield<9, 1>  { }; /* Excess defer enabled */
+			struct Fulld   : Bitfield<10, 1> { }; /* Full/Half duplex */
+			struct Crcen   : Bitfield<13, 1> { }; /* Enable TX CRC */
 		};
 
 		struct Int_source : Register<0x4, 32>
@@ -118,16 +163,13 @@ class Genode::Opencores : Attached_mmio
 			struct Busy : Bitfield<1, 1> { };
 		};
 
-		/* reverse order 0 = byte 5, 6 = byte 0 */
+		/* reverse order 0 = byte 5, 5 = byte 0 */
 		struct Mac_addr : Register_array<0x40, 32, 6, 8> { };
-
-		struct PacketL : Register<0x18, 32> { };
 
 		void _configure_mac_address()
 		{
-			log("using MAC: ", _mac);
 			for (unsigned i = 0; i < 6; i++) {
-				write<Mac_addr>(_mac.addr[i], i);
+				write<Mac_addr>(_mac.addr[5 - i], i);
 			}
 		}
 
@@ -144,12 +186,12 @@ class Genode::Opencores : Attached_mmio
 
 		struct Tx_descriptor : Register_array<0x400, 64, TX, 64>
 		{
+			struct Crc   : Bitfield<11, 1>  { }; /* CRC enable */
 			struct Pad   : Bitfield<12, 1>  { }; /* PAD short packets */
 			struct Wr    : Bitfield<13, 1>  { }; /* wrap */
 			struct Irq   : Bitfield<14, 1>  { }; /* Raise IRQ */
 			struct Rd    : Bitfield<15, 1>  { }; /* Descriptor is ready */
 			struct Len   : Bitfield<16, 16> { }; /* length */
-			struct Clear : Bitfield<0, 16>  { };
 			struct Txpnt : Bitfield<32, 32> { }; /* buffer pointer */
 		};
 
@@ -167,15 +209,15 @@ class Genode::Opencores : Attached_mmio
 		unsigned _tx_next()  const { return (_tx_index() + 1) % TX; }
 		unsigned _rx_next()  const { return (_rx_index() + 1) % RX; }
 
-		void *_transmit_buffer(unsigned index) const
+		void *_transmit_buffer(unsigned index)
 		{
-			addr_t begin = (addr_t)_dma_mem.local_addr<addr_t>();
+			addr_t begin = (addr_t)_dma_mem.local_addr();
 			return (void *)(begin + index * 0x800);
 		}
 
-		void *_receive_buffer(unsigned index) const
+		void *_receive_buffer(unsigned index)
 		{
-			addr_t begin = (addr_t)_dma_mem.local_addr<addr_t>() + TX * 0x800;
+			addr_t begin = (addr_t)_dma_mem.local_addr() + TX * 0x800;
 			return (void *)(begin + index * 0x800);
 		}
 
@@ -242,7 +284,6 @@ class Genode::Opencores : Attached_mmio
 				Genode::error("PHY reset failed");
 				throw -1;
 			}
-			log("phy reset done");
 		}
 
 		void _phy_init()
@@ -271,9 +312,10 @@ class Genode::Opencores : Attached_mmio
 			write<Miiaddress::Rgad>(BMSR);
 			unsigned retry = 0;
 			do {
+				_delayer.usleep(100000);
 				_phy_read_transaction();
-			} while(!(read<Miirx_data::Prsd>() & BMSR_LINK_STATUS) && retry < 200);
-			if (retry >= 200) {
+			} while(!(read<Miirx_data::Prsd>() & BMSR_LINK_STATUS) && retry++ < 100);
+			if (retry >= 100) {
 				Genode::error("PHY duplex/speed setup failed\n");
 				throw -1;
 			}
@@ -282,10 +324,14 @@ class Genode::Opencores : Attached_mmio
 
 	public:
 
-		Opencores(Env &env, addr_t base, Mmio::Delayer &delayer)
+		Opencores(Env &env, addr_t base,
+		          Net::Mac_address mac,
+		          unsigned const phy_port,
+		          addr_t dma_base, Mmio::Delayer &delayer)
 		:
 			Attached_mmio(env, base, 0x1000),
-			_env(env), _delayer(delayer)
+			_env(env), _delayer(delayer), _mac(mac), _phy_port(phy_port),
+			_dma_mem(env, dma_base, (TX + RX) * 0x800)
 		{
 			Moder::access_t moder = 0;
 			Moder::Bro::set(moder, 1);
@@ -295,49 +341,43 @@ class Genode::Opencores : Attached_mmio
 			Moder::Exdfren::set(moder, 1);
 			Moder::Fulld::set(moder, 1);
 			Moder::NoPre::set(moder, 1);
+			Moder::Crcen::set(moder, 1);
 			write<Moder>(moder);
 
 			/* enable RX interrupts */
 			write<Int_mask>(0);
 			write<Int_mask::Rxb>(1);
-//			write<Int_mask::Txb>(1);
 
 			/* set packet gaps to recommented values (eth_speci.pdf) */
 			write<Ipgt>(0x15);
 
-			//XXX: PHY=1 for Qemu, PHY=0 for MiG-V
-			write<Miiaddress::Fiad>(phy_port);
+			write<Miiaddress::Fiad>(_phy_port);
 			_configure_mac_address();
 
 			unsigned const div = 10;
 			write<Miimoder::Clkdiv>(div);
-			log("MII CLK DIV set to: ", div);
 			_phy_reset();
 			_phy_init();
 
 			/* number of TX descriptors */
 			write<Tx_bd::Num>(TX);
-			/* set wrap bit for last descriptors */
-			write<Tx_descriptor::Wr>(1, TX - 1);
-			write<Rx_descriptor::Wr>(1, RX - 1);
 
-			/* fill receive buffer descriptors */
-			addr_t phys = Dataspace_client(_dma_mem.cap()).phys_addr();
+			/* fill tx/rx buffer descriptors */
+			addr_t phys = _dma_mem.phys_addr();
+
 			for (unsigned index = 0; index < TX; index++) {
-				//log("tbuf[", index, "]: ", Hex(phys + 0x800 * index),
-				//    " virt: ", _transmit_buffer(index));
-
 				_setup_transmit_buffer(phys + 0x800 * index, index);
 			}
 
 			phys += TX * 0x800;
 			for (unsigned index = 0; index < RX; index++) {
-				//log("rbuf[", index, "]: ", Hex(phys + 0x800 * index),
-				//    " virt: ", _receive_buffer(index));
 				_setup_receive_buffer(phys + 0x800 * index, index);
 			}
 
-			log("TX/RX setup done");
+			/* set wrap bit for last descriptors */
+			write<Tx_descriptor::Wr>(1, TX - 1);
+			write<Rx_descriptor::Wr>(1, RX - 1);
+
 			_enable();
 		}
 
@@ -346,18 +386,18 @@ class Genode::Opencores : Attached_mmio
 		bool transmit(void const *address, uint16_t length)
 		{
 			Tx_descriptor::access_t descr = read<Tx_descriptor>(_tx_index());
+
 			if (Tx_descriptor::Rd::get(descr)) return false;
+
 			memcpy(_transmit_buffer(_tx_index()), address, length);
 
-			Tx_descriptor::Clear::set(descr, 0);
 			Tx_descriptor::Pad::set(descr, 1);
+			Tx_descriptor::Crc::set(descr, 1);
 			Tx_descriptor::Len::set(descr, length);
 			Tx_descriptor::Rd::set(descr, 1);
-			Tx_descriptor::Irq::set(descr, 1 );
-
-			log("[", _tx_index(), "] transmit desc: ", Hex(descr));
 
 			write<Tx_descriptor>(descr, _tx_index());
+
 			_current_tx = _tx_next();
 
 			return true;
@@ -368,18 +408,17 @@ class Genode::Opencores : Attached_mmio
 			return read<Rx_descriptor::E>(_rx_index()) == 0;
 		}
 
-		void log_irq()
-		{
-			log("IRQ: ", Hex(read<Int_source>()));
-		}
-
 		size_t receive_length() const
 		{
 			return read<Rx_descriptor::Len>(_rx_index());
 		}
 
-		void receive(void *address, uint16_t length)
+		void receive(void *address, size_t &length)
 		{
+			uint16_t rx_length = read<Rx_descriptor::Len>(_rx_index());
+			if (rx_length < length)
+				length = rx_length;
+
 			memcpy(address, _receive_buffer(_rx_index()), length);
 			write<Rx_descriptor::E>(1, _rx_index());
 			_current_rx = _rx_next();
@@ -390,6 +429,7 @@ class Genode::Opencores : Attached_mmio
 			write<Int_source::Rxb>(1);
 		}
 };
+
 
 template<typename T>
 class Genode::Uplink_client : public Signal_handler<Uplink_client<T>>,
@@ -403,13 +443,12 @@ class Genode::Uplink_client : public Signal_handler<Uplink_client<T>>,
 
 		void _handle_irq()
 		{
-			_nic.log_irq();
 			while (_nic.receive_ready()) {
 
 				_drv_rx_handle_pkt(
 					_nic.receive_length(),
 					[&] (void   *tx_pkt_base,
-					     size_t  tx_pkt_size)
+					     size_t &tx_pkt_size)
 				{
 					_nic.receive(tx_pkt_base, tx_pkt_size);
 					return Write_result::WRITE_SUCCEEDED;
@@ -461,10 +500,46 @@ class Main
 			void usleep(uint64_t us) override { Timer::Connection::usleep(us); }
 		} _delayer { _env };
 
-		Irq_connection      _irq    { _env, 22 };
-		Opencores           _nic    { _env, 0x600000, _delayer };
+		Attached_rom_dataspace _config_rom { _env, "config" };
+
+		Irq_connection      _irq    { _env, _read_irq(_config_rom.xml()) };
+		Opencores           _nic    { _env,
+		                              _read_mmio(_config_rom.xml()),
+		                              _read_mac(_config_rom.xml()),
+		                              _read_port(_config_rom.xml()),
+		                              _read_dma_base(_config_rom.xml()),
+		                              _delayer };
 		Heap                _heap   { _env.ram(), _env.rm() };
 		Uplink_client<Main> _uplink { _env, _heap, _nic, *this, &Main::ack_irq };
+
+		static unsigned _read_irq(Xml_node const &config)
+		{
+			unsigned irq = config.attribute_value("irq", 0L);
+			if (irq == 0) {
+				error("No 'irq' attribute configured");
+				throw -1;
+			}
+			return irq;
+		}
+
+		static addr_t _read_mmio(Xml_node const &config)
+		{
+			addr_t mmio = config.attribute_value("mmio", 0L);
+			if (mmio == 0) {
+				error("No 'mmio' attribute configured");
+				throw -1;
+			}
+			return mmio;
+		}
+
+		static unsigned _read_port(Xml_node const &config) {
+			return config.attribute_value("phy_port", 0L); }
+
+		static addr_t _read_dma_base(Xml_node const &config) {
+			return config.attribute_value("dma_mem", 0L); }
+
+		static Net::Mac_address _read_mac(Xml_node const &config) {
+			return config.attribute_value("mac", Net::Mac_address(0x2)); }
 
 	public:
 
@@ -484,3 +559,4 @@ void Component::construct(Genode::Env &env)
 
 	static Main main(env);
 }
+
