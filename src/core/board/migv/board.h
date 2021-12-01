@@ -15,6 +15,7 @@
 #define _CORE__BOARD__MIGV__BOARD_H_
 
 #include <hw/spec/riscv/migv_board.h>
+#include <spec/riscv/cpu.h>
 #include <spec/riscv/pic.h>
 
 namespace Board { using namespace Hw::Riscv_board; }
