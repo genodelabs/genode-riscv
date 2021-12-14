@@ -15,6 +15,7 @@
 #include <base/attached_ram_dataspace.h>
 #include <base/component.h>
 #include <base/heap.h>
+#include <base/sleep.h>
 #include <dataspace/client.h>
 #include <irq_session/connection.h>
 #include <net/mac_address.h>
@@ -80,12 +81,23 @@ class Genode::Opencores : Attached_mmio
 					                  : (addr_t)_ram_mem->local_addr<addr_t>();
 				}
 
-				addr_t phys_addr()
+				/*
+				 * the NIC only supports 32 bit descriptor addresses
+				 */
+				uint32_t phys_addr()
 				{
+					addr_t phys = 0;
 					if (_mmio_mem.constructed())
-						return _mmio_base;
+						phys = _mmio_base;
+					else
+						phys = Dataspace_client(_ram_mem->cap()).phys_addr();
 
-					return Dataspace_client(_ram_mem->cap()).phys_addr();
+					if (phys > ~0u) {
+						error("DMA address ", Hex(phys), " > 32 bit");
+						sleep_forever();
+					}
+
+					return (uint32_t)phys;
 				}
 		};
 
@@ -363,7 +375,7 @@ class Genode::Opencores : Attached_mmio
 			write<Tx_bd::Num>(TX);
 
 			/* fill tx/rx buffer descriptors */
-			addr_t phys = _dma_mem.phys_addr();
+			uint32_t phys = _dma_mem.phys_addr();
 
 			for (unsigned index = 0; index < TX; index++) {
 				_setup_transmit_buffer(phys + 0x800 * index, index);
@@ -383,7 +395,7 @@ class Genode::Opencores : Attached_mmio
 
 		Net::Mac_address &mac_address() { return _mac; }
 
-		bool transmit(void const *address, uint16_t length)
+		bool transmit(void const *address, size_t length)
 		{
 			Tx_descriptor::access_t descr = read<Tx_descriptor>(_tx_index());
 
@@ -410,12 +422,12 @@ class Genode::Opencores : Attached_mmio
 
 		size_t receive_length() const
 		{
-			return read<Rx_descriptor::Len>(_rx_index());
+			return (size_t)read<Rx_descriptor::Len>(_rx_index());
 		}
 
 		void receive(void *address, size_t &length)
 		{
-			uint16_t rx_length = read<Rx_descriptor::Len>(_rx_index());
+			size_t rx_length = (size_t)read<Rx_descriptor::Len>(_rx_index());
 			if (rx_length < length)
 				length = rx_length;
 
@@ -514,7 +526,7 @@ class Main
 
 		static unsigned _read_irq(Xml_node const &config)
 		{
-			unsigned irq = config.attribute_value("irq", 0L);
+			unsigned irq = config.attribute_value("irq", 0u);
 			if (irq == 0) {
 				error("No 'irq' attribute configured");
 				throw -1;
@@ -533,7 +545,7 @@ class Main
 		}
 
 		static unsigned _read_port(Xml_node const &config) {
-			return config.attribute_value("phy_port", 0L); }
+			return config.attribute_value("phy_port", 0u); }
 
 		static addr_t _read_dma_base(Xml_node const &config) {
 			return config.attribute_value("dma_mem", 0L); }
