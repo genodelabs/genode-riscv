@@ -121,6 +121,7 @@ class Genode::Opencores : Attached_mmio
 
 		struct Int_source : Register<0x4, 32>
 		{
+			struct Txb : Bitfield<0, 1> { };
 			struct Rxb : Bitfield<2, 1> { };
 		};
 
@@ -353,11 +354,12 @@ class Genode::Opencores : Attached_mmio
 			Moder::Exdfren::set(moder, 1);
 			Moder::Fulld::set(moder, 1);
 			Moder::NoPre::set(moder, 1);
-			Moder::Crcen::set(moder, 1);
+			Moder::Crcen::set(moder, 0);
 			write<Moder>(moder);
 
-			/* enable RX interrupts */
+			/* enable TX/RX interrupts */
 			write<Int_mask>(0);
+			write<Int_mask::Txb>(1);
 			write<Int_mask::Rxb>(1);
 
 			/* set packet gaps to recommented values (eth_speci.pdf) */
@@ -407,6 +409,7 @@ class Genode::Opencores : Attached_mmio
 			Tx_descriptor::Crc::set(descr, 1);
 			Tx_descriptor::Len::set(descr, length);
 			Tx_descriptor::Rd::set(descr, 1);
+			Tx_descriptor::Irq::set(descr, 1);
 
 			write<Tx_descriptor>(descr, _tx_index());
 
@@ -436,9 +439,18 @@ class Genode::Opencores : Attached_mmio
 			_current_rx = _rx_next();
 		}
 
-		void receive_ack()
+		template <typename TX_FN, typename RX_FN>
+		void with_irq(TX_FN const tx_fn, RX_FN const rx_fn)
 		{
-			write<Int_source::Rxb>(1);
+			Int_source::access_t source = read<Int_source>();
+
+			if (Int_source::Rxb::get(source))
+				rx_fn();
+
+			if (Int_source::Txb::get(source))
+				tx_fn();
+
+			write<Int_source>(source);
 		}
 };
 
@@ -455,20 +467,28 @@ class Genode::Uplink_client : public Signal_handler<Uplink_client<T>>,
 
 		void _handle_irq()
 		{
-			while (_nic.receive_ready()) {
+			auto tx_fn = [&]()
+			{
+				/* poke uplink client */
+				_conn_rx_handle_packet_avail();
+			};
 
-				_drv_rx_handle_pkt(
-					_nic.receive_length(),
-					[&] (void   *tx_pkt_base,
-					     size_t &tx_pkt_size)
-				{
-					_nic.receive(tx_pkt_base, tx_pkt_size);
-					return Write_result::WRITE_SUCCEEDED;
-				});
-			}
+			auto rx_fn = [&] ()
+			{
+				while (_nic.receive_ready()) {
+					_drv_rx_handle_pkt(
+						_nic.receive_length(),
+						[&] (void   *tx_pkt_base,
+						     size_t &tx_pkt_size)
+					{
+						_nic.receive(tx_pkt_base, tx_pkt_size);
+						return Write_result::WRITE_SUCCEEDED;
+					});
+				}
+			};
 
-			/* ack IRQ device */
-			_nic.receive_ack();
+			_nic.with_irq(tx_fn, rx_fn);
+
 			/* ack IRQ controller */
 			(_obj.*_ack_irq)();
 		}
