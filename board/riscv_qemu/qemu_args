@@ -1,2 +1,2 @@
--m 128 -machine virt -cpu rv64,priv_spec=v1.10.0
+-m 512 -machine virt -cpu rv64,priv_spec=v1.10.0
 -bios default
