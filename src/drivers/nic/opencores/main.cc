@@ -19,7 +19,8 @@
 #include <dataspace/client.h>
 #include <irq_session/connection.h>
 #include <net/mac_address.h>
-#include <os/attached_mmio.h>
+#include <platform_session/device.h>
+#include <platform_session/dma_buffer.h>
 #include <timer_session/connection.h>
 #include <util/reconstructible.h>
 
@@ -33,7 +34,7 @@ namespace Genode {
 }
 
 
-class Genode::Opencores : Attached_mmio
+class Genode::Opencores : Mmio
 {
 	private:
 
@@ -59,45 +60,63 @@ class Genode::Opencores : Attached_mmio
 		{
 			private:
 
-				Constructible<Attached_mmio>          _mmio_mem { };
-				Constructible<Attached_ram_dataspace> _ram_mem  { };
-				addr_t                                _mmio_base;
+				using Device = Platform::Device;
+
+				Constructible<Device::Mmio>         _mmio_mem { };
+				Constructible<Platform::Dma_buffer> _dma_mem { };
+				addr_t                              _base { 0 };
+				addr_t                              _dma_addr { 0 };
 
 			public:
 
-				Dma_mem(Env &env, addr_t mmio_base, size_t size)
-				:
-				  _mmio_base(mmio_base)
+				Dma_mem(Platform::Connection &platform,
+				        Platform::Device &device)
 				{
-					if (mmio_base)
-						_mmio_mem.construct(env, mmio_base, size);
-					else
-						_ram_mem.construct(env. ram(), env.rm(), size, UNCACHED);
+					using String = String<64>;
+
+					/* search for I/O mem resource for DMA = resource (1) */
+					platform.with_xml([&] (Xml_node & xml) {
+						xml.for_each_sub_node("device", [&] (Xml_node node) {
+
+							String type = node.attribute_value("type", String());
+							if (type == "opencores,ethoc") {
+								node.for_each_sub_node("io_mem", [&] (Xml_node io_mem_node) {
+
+									addr_t size = io_mem_node.attribute_value("size", 0ul);
+									if (size != 0x40000) return;
+
+									_dma_addr = io_mem_node.attribute_value("phys_addr", 0ul);
+									if (_dma_addr == 0) return;
+
+									_mmio_mem.construct(device, Device::Mmio::Index{ 1 });
+									_base = (addr_t)_mmio_mem->local_addr<void>();
+									log("Using I/O Memory for DMA");
+								});
+							}
+						});
+					});
+
+					if (_base && _dma_addr)
+						return;
+
+					/* use regular DMA memory */
+					_dma_mem.construct(platform, 128*2048, UNCACHED);
+					_base = (addr_t)_dma_mem->local_addr<void>();
+					_dma_addr = _dma_mem->dma_addr();
+					log("Using RAM for DMA");
 				}
 
-				addr_t local_addr()
+				addr_t local_addr() const
 				{
-					return _mmio_base ? (addr_t)_mmio_mem->local_addr<addr_t>()
-					                  : (addr_t)_ram_mem->local_addr<addr_t>();
+					return _base;
 				}
 
 				/*
 				 * the NIC only supports 32 bit descriptor addresses
 				 */
-				uint32_t phys_addr()
+				uint32_t dma_addr()
 				{
-					addr_t phys = 0;
-					if (_mmio_mem.constructed())
-						phys = _mmio_base;
-					else
-						phys = Dataspace_client(_ram_mem->cap()).phys_addr();
-
-					if (phys > ~0u) {
-						error("DMA address ", Hex(phys), " > 32 bit");
-						sleep_forever();
-					}
-
-					return (uint32_t)phys;
+					return (uint32_t)_dma_addr;
 				}
 		};
 
@@ -337,14 +356,17 @@ class Genode::Opencores : Attached_mmio
 
 	public:
 
-		Opencores(Env &env, addr_t base,
-		          Net::Mac_address mac,
-		          unsigned const phy_port,
-		          addr_t dma_base, Mmio::Delayer &delayer)
+		Opencores(Env &env,
+		          Platform::Connection &platform,
+		          Platform::Device &device,
+		          Platform::Device::Mmio &mmio,
+		          Net::Mac_address  mac,
+		          unsigned const    phy_port,
+		          Mmio::Delayer    &delayer)
 		:
-			Attached_mmio(env, base, 0x1000),
+			Mmio((addr_t)mmio.local_addr<void>()),
 			_env(env), _delayer(delayer), _mac(mac), _phy_port(phy_port),
-			_dma_mem(env, dma_base, (TX + RX) * 0x800)
+			_dma_mem(platform, device)
 		{
 			Moder::access_t moder = 0;
 			Moder::Bro::set(moder, 1);
@@ -377,15 +399,15 @@ class Genode::Opencores : Attached_mmio
 			write<Tx_bd::Num>(TX);
 
 			/* fill tx/rx buffer descriptors */
-			uint32_t phys = _dma_mem.phys_addr();
+			uint32_t dma_addr = _dma_mem.dma_addr();
 
 			for (unsigned index = 0; index < TX; index++) {
-				_setup_transmit_buffer(phys + 0x800 * index, index);
+				_setup_transmit_buffer(dma_addr + 0x800 * index, index);
 			}
 
-			phys += TX * 0x800;
+			dma_addr += TX * 0x800;
 			for (unsigned index = 0; index < RX; index++) {
-				_setup_receive_buffer(phys + 0x800 * index, index);
+				_setup_receive_buffer(dma_addr + 0x800 * index, index);
 			}
 
 			/* set wrap bit for last descriptors */
@@ -534,41 +556,20 @@ class Main
 
 		Attached_rom_dataspace _config_rom { _env, "config" };
 
-		Irq_connection      _irq    { _env, _read_irq(_config_rom.xml()) };
-		Opencores           _nic    { _env,
-		                              _read_mmio(_config_rom.xml()),
+		Platform::Connection   _platform { _env };
+		Platform::Device       _device   { _platform };
+		Platform::Device::Mmio _mmio     { _device };
+		Platform::Device::Irq  _irq      { _device };
+
+		Opencores           _nic    { _env, _platform, _device, _mmio,
 		                              _read_mac(_config_rom.xml()),
 		                              _read_port(_config_rom.xml()),
-		                              _read_dma_base(_config_rom.xml()),
 		                              _delayer };
 		Heap                _heap   { _env.ram(), _env.rm() };
-		Uplink_client<Main> _uplink { _env, _heap, _nic, *this, &Main::ack_irq };
-
-		static unsigned _read_irq(Xml_node const &config)
-		{
-			unsigned irq = config.attribute_value("irq", 0u);
-			if (irq == 0) {
-				error("No 'irq' attribute configured");
-				throw -1;
-			}
-			return irq;
-		}
-
-		static addr_t _read_mmio(Xml_node const &config)
-		{
-			addr_t mmio = config.attribute_value("mmio", 0L);
-			if (mmio == 0) {
-				error("No 'mmio' attribute configured");
-				throw -1;
-			}
-			return mmio;
-		}
+		Uplink_client<Main> _uplink { _env, _heap, _nic, *this, &Main::ack };
 
 		static unsigned _read_port(Xml_node const &config) {
 			return config.attribute_value("phy_port", 0u); }
-
-		static addr_t _read_dma_base(Xml_node const &config) {
-			return config.attribute_value("dma_mem", 0L); }
 
 		static Net::Mac_address _read_mac(Xml_node const &config) {
 			return config.attribute_value("mac", Net::Mac_address(0x2)); }
@@ -578,10 +579,10 @@ class Main
 		Main(Env &env) : _env(env)
 		{
 			_irq.sigh(_uplink);
-			_irq.ack_irq();
+			_irq.ack();
 		}
 
-		void ack_irq() { _irq.ack_irq(); }
+		void ack() { _irq.ack(); }
 };
 
 
