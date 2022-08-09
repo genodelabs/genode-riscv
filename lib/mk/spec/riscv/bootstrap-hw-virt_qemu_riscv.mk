@@ -1,4 +1,4 @@
-INC_DIR += $(REP_DIR)/src/bootstrap/board/riscv_qemu
+INC_DIR += $(REP_DIR)/src/bootstrap/board/virt_qemu_riscv
 
 SRC_CC  += bootstrap/spec/riscv/platform.cc
 SRC_S   += bootstrap/spec/riscv/crt0.s
