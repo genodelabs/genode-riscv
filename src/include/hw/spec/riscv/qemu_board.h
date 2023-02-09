@@ -28,6 +28,8 @@ namespace Hw::Riscv_board {
 
 		PLIC_BASE = 0xc000000,
 		PLIC_SIZE = 0x202000,
+
+		NR_OF_CPUS = 1,
 	};
 
 	enum { UART_BASE, UART_CLOCK };
