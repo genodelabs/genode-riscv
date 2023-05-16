@@ -20,26 +20,23 @@ struct Board::Plic : Genode::Mmio
 {
 		enum {
 			/*
-			 * Single core Qemu virt machine uses context 1 for
-			 * supervisor mode interrupts and 0 for machine mode.
-			 */
-			CONTEXT   = 0x1,
-			/*
 			 * VIRT_IRQCHIP_NUM_SOURCES from Qemu include/hw/riscv/virt.h.
 			 */
 			NR_OF_IRQ = 96,
 		};
-		enum {
-			ENABLE_BASE    = 0x2000,
-			ENABLE_STRIDE  = 0x80,
-			CONTEXT_BASE   = 0x200000,
-			CONTEXT_STRIDE = 0x1000,
-		};
-		enum {
-			ENABLE_ADDR   = ENABLE_BASE + CONTEXT * ENABLE_STRIDE,
-			PRI_THR_ADDR  = CONTEXT_BASE + CONTEXT * CONTEXT_STRIDE,
-			ID_ADDR       = CONTEXT_BASE + CONTEXT * CONTEXT_STRIDE + 0x4,
-		};
+
+		/*
+		 * Single core Qemu virt machine uses context 1 for
+		 * supervisor mode interrupts and 0 for machine mode.
+		 */
+		static constexpr Genode::size_t CONTEXT        = 0x1;
+		static constexpr Genode::addr_t ENABLE_BASE    = 0x2000;
+		static constexpr Genode::size_t ENABLE_STRIDE  = 0x80;
+		static constexpr Genode::addr_t CONTEXT_BASE   = 0x200000;
+		static constexpr Genode::size_t CONTEXT_STRIDE = 0x1000;
+		static constexpr Genode::addr_t ENABLE_ADDR    = ENABLE_BASE + CONTEXT * ENABLE_STRIDE;
+		static constexpr Genode::addr_t PRI_THR_ADDR   = CONTEXT_BASE + CONTEXT * CONTEXT_STRIDE;
+		static constexpr Genode::addr_t ID_ADDR        = CONTEXT_BASE + CONTEXT * CONTEXT_STRIDE + 0x4;
 
 		struct Priority           : Register_array<0x4, 32, NR_OF_IRQ - 1, 32> { };
 		struct Enable             : Register_array<ENABLE_ADDR, 32, NR_OF_IRQ, 1> { };
