@@ -19,7 +19,6 @@ SRC_CC += lib/base/heap.cc
 SRC_CC += lib/base/slab.cc
 SRC_CC += lib/base/allocator_avl.cc
 SRC_CC += lib/base/sleep.cc
-SRC_CC += lib/startup/_main.cc
 SRC_CC += hw/capability.cc
 
 INC_DIR += $(call select_from_repositories,src/include)
@@ -31,5 +30,4 @@ vpath crt0.s $(call select_from_repositories,src/bootstrap/spec/riscv)
 
 vpath bootstrap/%   $(call select_from_repositories,src)
 vpath lib/base/%    $(BASE_DIR)/src
-vpath lib/startup/% $(BASE_DIR)/src
 vpath hw/%          $(call select_from_repositories,src/lib)
