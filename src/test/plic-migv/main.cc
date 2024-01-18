@@ -22,7 +22,7 @@ using namespace Genode;
 
 namespace Genode { class Timer0; }
 
-class Genode::Timer0 : Attached_mmio
+class Genode::Timer0 : Attached_mmio<0xc>
 {
 	enum { MS = 32 * 1024 };
 
@@ -37,7 +37,7 @@ class Genode::Timer0 : Attached_mmio
 
 		Timer0(Env &env, addr_t base)
 		:
-		  Attached_mmio(env, base, 0x1000)
+		  Attached_mmio(env, {(char *)base, 0x1000})
 		{ }
 
 		void enable()  { write<Ctrl::Enable>(0x1); }

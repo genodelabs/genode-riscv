@@ -18,10 +18,10 @@
 #include <util/mmio.h>
 #include <base/log.h>
 
-struct Soc_configuration : Genode::Mmio
+struct Soc_configuration : Genode::Mmio<0x6c>
 {
 	Soc_configuration(Genode::addr_t const mmio_base)
-		: Genode::Mmio(mmio_base) { }
+		: Mmio({(char *)mmio_base, Mmio::SIZE}) { }
 
 	struct Rst : Register<0x4, 32>
 	{
@@ -88,10 +88,10 @@ struct Soc_configuration : Genode::Mmio
 
 };
 
-struct Gpio : Genode::Mmio
+struct Gpio : Genode::Mmio<0xc>
 {
 	Gpio(Genode::addr_t const mmio_base)
-	: Genode::Mmio(mmio_base)  { }
+	: Mmio({(char *)mmio_base, Mmio::SIZE})  { }
 
 	struct Padout : Register<0x8, 32> { };
 

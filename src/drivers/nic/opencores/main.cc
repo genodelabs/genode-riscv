@@ -34,7 +34,7 @@ namespace Genode {
 }
 
 
-class Genode::Opencores : Mmio
+class Genode::Opencores : Mmio<0x400 + 64 * 8 + 64 * 8>
 {
 	private:
 
@@ -62,7 +62,7 @@ class Genode::Opencores : Mmio
 
 				using Device = Platform::Device;
 
-				Constructible<Device::Mmio>         _mmio_mem { };
+				Constructible<Device::Mmio<0> >     _mmio_mem { };
 				Constructible<Platform::Dma_buffer> _dma_mem { };
 				addr_t                              _base { 0 };
 				addr_t                              _dma_addr { 0 };
@@ -88,7 +88,7 @@ class Genode::Opencores : Mmio
 									_dma_addr = io_mem_node.attribute_value("phys_addr", 0ul);
 									if (_dma_addr == 0) return;
 
-									_mmio_mem.construct(device, Device::Mmio::Index{ 1 });
+									_mmio_mem.construct(device, Device::Mmio<0>::Index{ 1 });
 									_base = (addr_t)_mmio_mem->local_addr<void>();
 									log("Using I/O Memory for DMA");
 								});
@@ -359,12 +359,12 @@ class Genode::Opencores : Mmio
 		Opencores(Env &env,
 		          Platform::Connection &platform,
 		          Platform::Device &device,
-		          Platform::Device::Mmio &mmio,
+		          Platform::Device::Mmio<0> &mmio,
 		          Net::Mac_address  mac,
 		          unsigned const    phy_port,
 		          Mmio::Delayer    &delayer)
 		:
-			Mmio((addr_t)mmio.local_addr<void>()),
+			Mmio(mmio.range()),
 			_env(env), _delayer(delayer), _mac(mac), _phy_port(phy_port),
 			_dma_mem(platform, device)
 		{
@@ -545,7 +545,7 @@ class Main
 
 		Env &_env;
 
-		struct Timer_delayer : Mmio::Delayer, Timer::Connection
+		struct Timer_delayer : Mmio<0>::Delayer, Timer::Connection
 		{
 			Timer_delayer(Env &env)
 			:
@@ -556,10 +556,10 @@ class Main
 
 		Attached_rom_dataspace _config_rom { _env, "config" };
 
-		Platform::Connection   _platform { _env };
-		Platform::Device       _device   { _platform };
-		Platform::Device::Mmio _mmio     { _device };
-		Platform::Device::Irq  _irq      { _device };
+		Platform::Connection      _platform { _env };
+		Platform::Device          _device   { _platform };
+		Platform::Device::Mmio<0> _mmio     { _device };
+		Platform::Device::Irq     _irq      { _device };
 
 		Opencores           _nic    { _env, _platform, _device, _mmio,
 		                              _read_mac(_config_rom.xml()),

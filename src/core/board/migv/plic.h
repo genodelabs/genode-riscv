@@ -16,7 +16,7 @@
 
 namespace Board { class Plic; }
 
-struct Board::Plic : Genode::Mmio
+struct Board::Plic : Genode::Mmio<0x30>
 {
 		enum { NR_OF_IRQ = 24 };
 
@@ -25,9 +25,9 @@ struct Board::Plic : Genode::Mmio
 		struct Enable   : Register_array<0x1c, 32, NR_OF_IRQ, 1> { };
 		struct Id       : Register<0x2c, 32> { };
 
-		Plic(Genode::addr_t const base)
+		Plic(Genode::Byte_range_ptr const &range)
 		:
-			Mmio(base)
+			Mmio(range)
 		{
 			/* set all priorities to 1 */
 			for (unsigned i = 0; i < NR_OF_IRQ; i++)

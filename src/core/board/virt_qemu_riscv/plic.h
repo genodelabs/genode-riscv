@@ -16,7 +16,7 @@
 
 namespace Board { class Plic; }
 
-struct Board::Plic : Genode::Mmio
+struct Board::Plic : Genode::Mmio<0x200000 + 0x1 + 0x1000 + 0x4 + 4>
 {
 		enum {
 			/*
@@ -43,9 +43,9 @@ struct Board::Plic : Genode::Mmio
 		struct Priority_threshold : Register<PRI_THR_ADDR, 32> { };
 		struct Id                 : Register<ID_ADDR, 32> { };
 
-		Plic(Genode::addr_t const base)
+		Plic(Genode::Byte_range_ptr const &range)
 		:
-			Mmio(base)
+			Mmio(range)
 		{
 			write<Priority_threshold>(0);
 			for (unsigned i = 0; i < NR_OF_IRQ - 1; ++i)
