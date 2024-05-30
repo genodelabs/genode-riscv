@@ -1,4 +1,4 @@
-TARGET = opencores_nic_drv
+TARGET = opencores_nic
 SRC_CC = main.cc
 LIBS   = base nic_driver
 
