@@ -21,13 +21,16 @@ SRC_CC += lib/base/allocator_avl.cc
 SRC_CC += lib/base/sleep.cc
 SRC_CC += hw/capability.cc
 
-INC_DIR += $(call select_from_repositories,src/include)
+TMP         := $(call select_from_repositories,lib/mk/core-hw.inc)
+BASE_HW_DIR := $(TMP:%/lib/mk/core-hw.inc=%)
+
+INC_DIR += $(BASE_HW_DIR)/src/include
 INC_DIR += $(BASE_DIR)/src/include
 INC_DIR += $(REP_DIR)/src/include
 INC_DIR += $(REP_DIR)/src/bootstrap/board/migv
 
 vpath crt0.s $(call select_from_repositories,src/bootstrap/spec/riscv)
 
-vpath bootstrap/%   $(call select_from_repositories,src)
+vpath bootstrap/%   $(BASE_HW_DIR)/src
 vpath lib/base/%    $(BASE_DIR)/src
 vpath hw/%          $(call select_from_repositories,src/lib)
