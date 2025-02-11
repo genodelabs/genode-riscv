@@ -17,9 +17,7 @@ install_config {
 			<any-service> <parent/> <any-child/> </any-service>
 		</default-route>
 		<default caps="100"/>
-		<start name="test-plic-migv">
-			<resource name="RAM" quantum="10M"/>
-		</start>
+		<start name="test-plic-migv" ram="10M"/>
 	</config>
 }
 
