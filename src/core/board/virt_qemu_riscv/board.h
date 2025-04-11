@@ -21,6 +21,7 @@
 #include <spec/riscv/pic.h>
 #include <spec/riscv/cpu.h>
 #include <spec/riscv/timer.h>
+#include <no_vcpu_board.h>
 
 namespace Board { using namespace Hw::Riscv_board; }
 
