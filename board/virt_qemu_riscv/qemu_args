@@ -1,4 +1,4 @@
--m 512 -machine virt -cpu rv64,priv_spec=v1.10.0
+-m 512 -machine virt -cpu rv64,priv_spec=v1.12.0
 -bios default
 -global virtio-mmio.force-legacy=false
 -device virtio-net-device,bus=virtio-mmio-bus.0,netdev=net0
