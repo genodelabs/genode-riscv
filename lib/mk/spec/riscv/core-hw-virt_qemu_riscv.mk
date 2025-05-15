@@ -16,6 +16,9 @@ SRC_CC += spec/riscv/pic.cc
 SRC_CC += spec/riscv/platform_support.cc
 SRC_CC += spec/riscv/timer.cc
 
+# symbols never called in core but not garbage-collected as on other platforms
+SRC_C += spec/riscv/dummies.c
+
 #add assembly sources
 SRC_S += spec/riscv/exception_vector.s
 SRC_S += spec/riscv/crt0.s
