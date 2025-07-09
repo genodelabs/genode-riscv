@@ -75,12 +75,12 @@ class Genode::Opencores : Mmio<0x400 + 64 * 8 + 64 * 8>
 					using String = String<64>;
 
 					/* search for I/O mem resource for DMA = resource (1) */
-					platform.with_xml([&] (Xml_node & xml) {
-						xml.for_each_sub_node("device", [&] (Xml_node node) {
+					platform.with_node([&] (Node const &node) {
+						node.for_each_sub_node("device", [&] (Node const &node) {
 
 							String type = node.attribute_value("type", String());
 							if (type == "opencores,ethoc") {
-								node.for_each_sub_node("io_mem", [&] (Xml_node io_mem_node) {
+								node.for_each_sub_node("io_mem", [&] (Node const &io_mem_node) {
 
 									addr_t size = io_mem_node.attribute_value("size", 0ul);
 									if (size != 0x40000) return;
@@ -562,16 +562,16 @@ class Main
 		Platform::Device::Irq     _irq      { _device };
 
 		Opencores           _nic    { _env, _platform, _device, _mmio,
-		                              _read_mac(_config_rom.xml()),
-		                              _read_port(_config_rom.xml()),
+		                              _read_mac(_config_rom.node()),
+		                              _read_port(_config_rom.node()),
 		                              _delayer };
 		Heap                _heap   { _env.ram(), _env.rm() };
 		Uplink_client<Main> _uplink { _env, _heap, _nic, *this, &Main::ack };
 
-		static unsigned _read_port(Xml_node const &config) {
+		static unsigned _read_port(Node const &config) {
 			return config.attribute_value("phy_port", 0u); }
 
-		static Net::Mac_address _read_mac(Xml_node const &config) {
+		static Net::Mac_address _read_mac(Node const &config) {
 			return config.attribute_value("mac", Net::Mac_address(0x2)); }
 
 	public:
