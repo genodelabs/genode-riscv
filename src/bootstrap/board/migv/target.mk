@@ -31,6 +31,12 @@ INC_DIR += $(REP_DIR)/src/bootstrap/board/migv
 
 vpath crt0.s $(call select_from_repositories,src/bootstrap/spec/riscv)
 
+ARCH_WIDTH_PATH := spec/64bit
+
 vpath bootstrap/%   $(BASE_HW_DIR)/src
+vpath hw/%          $(BASE_HW_DIR)/src/lib
+vpath lib/base/%    $(BASE_HW_DIR)/src
 vpath lib/base/%    $(BASE_DIR)/src
 vpath hw/%          $(call select_from_repositories,src/lib)
+
+include $(call select_from_repositories,lib/mk/consts-hw.inc)
