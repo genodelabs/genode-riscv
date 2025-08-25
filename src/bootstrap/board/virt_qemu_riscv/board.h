@@ -18,8 +18,4 @@
 
 namespace Board { using namespace Hw::Riscv_board; }
 
-template <typename E, unsigned B, unsigned S>
-void Sv39::Level_x_page_table<E, B, S>::table_changed()
-{ }
-
 #endif /* _SRC__BOOTSTRAP__SPEC__RISCV_QEMU__BOARD_H_ */
