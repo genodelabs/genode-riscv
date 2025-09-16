@@ -16,6 +16,7 @@
 #define _SRC__INCLUDE__HW__SPEC__RISCV__QEMU_BOARD_H_
 
 #include <hw/spec/riscv/boot_info.h>
+#include <hw/spec/riscv/cpu.h>
 #include <hw/spec/riscv/page_table.h>
 #include <hw/spec/riscv/sbi.h>
 
@@ -38,6 +39,8 @@ namespace Hw::Riscv_board {
 	{
 		Serial(Genode::addr_t, Genode::size_t, unsigned) { }
 	};
+
+	using Cpu = Hw::Riscv_cpu;
 }
 
 #endif /* _SRC__INCLUDE__HW__SPEC__RISCV__QEMU_BOARD_H_ */
