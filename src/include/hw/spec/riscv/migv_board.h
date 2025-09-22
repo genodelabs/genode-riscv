@@ -17,6 +17,7 @@
 #include <hw/spec/riscv/boot_info.h>
 #include <hw/spec/riscv/page_table.h>
 #include <hw/spec/riscv/sbi.h>
+#include <hw/spec/riscv/cpu.h>
 
 namespace Hw::Riscv_board {
 
@@ -35,6 +36,8 @@ namespace Hw::Riscv_board {
 	enum { UART_BASE, UART_CLOCK };
 	struct Serial : Hw::Riscv_uart {
 		Serial(Genode::addr_t, Genode::size_t, unsigned) {} };
+
+	using Cpu = Hw::Riscv_cpu;
 }
 
 #endif /* _SRC__INCLUDE__HW__SPEC__MIGV_BOARD_H_ */

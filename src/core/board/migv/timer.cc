@@ -25,7 +25,7 @@ enum {
 };
 
 
-Board::Timer::Timer(unsigned)
+Board::Timer::Timer(Hw::Riscv_cpu::Id)
 {
 	/* enable timer interrupt */
 	enum { STIE = 0x20 };
