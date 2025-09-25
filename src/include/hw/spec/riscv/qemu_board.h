@@ -23,8 +23,8 @@
 namespace Hw::Riscv_board {
 
 	enum {
-		RAM_BASE = 0x80040000,
-		RAM_SIZE = 0x1ffc0000,
+		RAM_BASE = 0x80060000,
+		RAM_SIZE = 0x1ffa0000,
 		TIMER_HZ = 10000000,
 
 		PLIC_BASE = 0xc000000,
