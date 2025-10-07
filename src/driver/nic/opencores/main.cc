@@ -75,6 +75,7 @@ class Genode::Opencores : Mmio<0x400 + 64 * 8 + 64 * 8>
 					using String = String<64>;
 
 					/* search for I/O mem resource for DMA = resource (1) */
+					platform.update();
 					platform.with_node([&] (Node const &node) {
 						node.for_each_sub_node("device", [&] (Node const &node) {
 
