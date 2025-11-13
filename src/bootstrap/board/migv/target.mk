@@ -28,6 +28,7 @@ INC_DIR += $(BASE_HW_DIR)/src/include
 INC_DIR += $(BASE_DIR)/src/include
 INC_DIR += $(REP_DIR)/src/include
 INC_DIR += $(REP_DIR)/src/bootstrap/board/migv
+INC_DIR += $(BASE_HW_DIR)/src/bootstrap
 
 vpath crt0.s $(call select_from_repositories,src/bootstrap/spec/riscv)
 
